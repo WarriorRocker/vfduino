@@ -1,4 +1,3 @@
-
 /*---------------------------------------------------------------*\
 |  Matrix Orbital compatible Samsung 20T202DA2JA VFD with remote  |
 |  Version 1.0 Developed and Designed by: Travis Brown            |
@@ -68,7 +67,7 @@ void runIntro() {
   bool breaker = false;
   while (!breaker) {
     for (int i = 2; i < (numScreens + 1); i++) {
-      if (breaker = ((serialAvailableDelay(2000)) || (vfdAnimateScreen(i, random(1, 3))))) {
+      if (breaker = ((serialAvailableDelay(2000)) || (vfdAnimateScreen(i, random(1, 5))))) {
         break;
       }
     }
@@ -330,69 +329,132 @@ void vfdWriteDebug(byte rxbyte) {
 }
 
 bool vfdAnimateScreen(int screen, int ani) {
-  if (ani == 1) {
-    for (int c = 0; c < 20; c++) {
-      for (int l = 0; l < 3; l++) {
-        for (int t = 0; t < 4; t++) {
-          vfdCommand(0x80 + c);
-          vfdData(pgm_read_byte(&(twirl[t])));
-          vfdCommand(0xc0 + (19 - c));
-          vfdData(pgm_read_byte(&(twirl[t])));
-          delay(3);
+  switch (ani) {
+    default: case 1: //left-right twirl swipe
+      for (int c = 0; c < 20; c++) {
+        for (int l = 0; l < 3; l++) {
+          for (int t = 0; t < 4; t++) {
+            vfdCommand(0x80 + c);
+            vfdData(pgm_read_byte(&(twirl[t])));
+            vfdCommand(0xc0 + (19 - c));
+            vfdData(pgm_read_byte(&(twirl[t])));
+            delay(3);
+          }
         }
+        vfdCommand(0x80 + c);
+        vfdData(vfdProcessData(pgm_read_byte(&(screens[(screen - 1)][c]))));
+        vfdCommand(0xc0 + (19 - c));
+        vfdData(vfdProcessData(pgm_read_byte(&(screens[(screen - 1)][20 + (19 - c)]))));
       }
-      vfdCommand(0x80 + c);
-      vfdData(vfdProcessData(pgm_read_byte(&(screens[(screen - 1)][c]))));
-      vfdCommand(0xc0 + (19 - c));
-      vfdData(vfdProcessData(pgm_read_byte(&(screens[(screen - 1)][20 + (19 - c)]))));
-    }
-  } else if (ani == 2) {
-    for (int c = 0; c < 10; c++) {
-      for (int l = 0; l < 3; l++) {
-        for (int t = 0; t < 4; t++) {
+      break;
+    case 2: //inward-outward twirl swipe  
+      for (int c = 0; c < 10; c++) {
+        for (int l = 0; l < 3; l++) {
+          for (int t = 0; t < 4; t++) {
+            vfdCommand(0x80 + c);
+            vfdData(pgm_read_byte(&(twirl[t])));
+            vfdCommand(0x80 + (19 - c));
+            vfdData(pgm_read_byte(&(twirl[t])));
+            vfdCommand(0xc0 + c);
+            vfdData(pgm_read_byte(&(twirl[t])));
+            vfdCommand(0xc0 + (19 - c));
+            vfdData(pgm_read_byte(&(twirl[t])));
+            if (serialAvailableDelay(3)) { return true; }
+          }
+        }
+        vfdCommand(0x80 + c);
+        vfdData(0x20);
+        vfdCommand(0x80 + (19 - c));
+        vfdData(0x20);
+        vfdCommand(0xc0 + c);
+        vfdData(0x20);
+        vfdCommand(0xc0 + (19 - c));
+        vfdData(0x20);
+      }
+      for (int c = 10; c < 20; c++) {
+        for (int l = 0; l < 3; l++) {
+          for (int t = 0; t < 4; t++) {
+            vfdCommand(0x80 + c);
+            vfdData(pgm_read_byte(&(twirl[t])));
+            vfdCommand(0x80 + (19 - c));
+            vfdData(pgm_read_byte(&(twirl[t])));
+            vfdCommand(0xc0 + c);
+            vfdData(pgm_read_byte(&(twirl[t])));
+            vfdCommand(0xc0 + (19 - c));
+            vfdData(pgm_read_byte(&(twirl[t])));
+            if (serialAvailableDelay(3)) { return true; }
+          }
+        }
+        vfdCommand(0x80 + c);
+        vfdData(vfdProcessData(pgm_read_byte(&(screens[(screen - 1)][c]))));
+        vfdCommand(0x80 + (19 - c));
+        vfdData(vfdProcessData(pgm_read_byte(&(screens[(screen - 1)][(19 - c)]))));
+        vfdCommand(0xc0 + c);
+        vfdData(vfdProcessData(pgm_read_byte(&(screens[(screen - 1)][20 + c]))));
+        vfdCommand(0xc0 + (19 - c));
+        vfdData(vfdProcessData(pgm_read_byte(&(screens[(screen - 1)][20 + (19 - c)]))));
+      }
+      break;
+    case 3: //random twirl character place
+
+      char order[40], r, t;
+      for (int i = 0; i < 40; i++) {
+        order[i] = i;
+      }
+      for (int i = 0; i < 40; i++) {
+        r = random(0, 40);
+        t = order[i];
+        order[i] = order[r];
+        order[r] = t;
+      }
+      for (int i = 0; i < 40; i++) {
+        for (int l = 0; l < 3; l++) {
+          for (int t = 0; t < 4; t++) {
+            vfdCommand(0x80 + order[i] + ((order[i] > 19) ? 0x2c : 0));
+            vfdData(pgm_read_byte(&(twirl[t])));
+            if (serialAvailableDelay(5)) { return true; }
+          }
+        }
+        vfdCommand(0x80 + order[i] + ((order[i] > 19) ? 0x2c : 0));
+        vfdData(vfdProcessData(pgm_read_byte(&(screens[(screen - 1)][order[i]]))));
+      }
+      break;
+    case 4: //inward-outward bar swipe
+      for (int c = 0; c < 10; c++) {
+        for (int t = 0; t < 5; t++) {
           vfdCommand(0x80 + c);
-          vfdData(pgm_read_byte(&(twirl[t])));
+          vfdData(0x10 + t);
           vfdCommand(0x80 + (19 - c));
-          vfdData(pgm_read_byte(&(twirl[t])));
+          vfdData(0x18 - t);
           vfdCommand(0xc0 + c);
-          vfdData(pgm_read_byte(&(twirl[t])));
+          vfdData(0x10 + t);
           vfdCommand(0xc0 + (19 - c));
-          vfdData(pgm_read_byte(&(twirl[t])));
-          if (serialAvailableDelay(3)) { return true; }
+          vfdData(0x18 - t);
+          if (serialAvailableDelay(10)) { return true; }
         }
       }
-      vfdCommand(0x80 + c);
-      vfdData(0x20);
-      vfdCommand(0x80 + (19 - c));
-      vfdData(0x20);
-      vfdCommand(0xc0 + c);
-      vfdData(0x20);
-      vfdCommand(0xc0 + (19 - c));
-      vfdData(0x20);
-    }
-    for (int c = 10; c < 20; c++) {
-      for (int l = 0; l < 3; l++) {
+      for (int c = 10; c < 20; c++) {
         for (int t = 0; t < 4; t++) {
           vfdCommand(0x80 + c);
-          vfdData(pgm_read_byte(&(twirl[t])));
+          vfdData(0x15 + t);
           vfdCommand(0x80 + (19 - c));
-          vfdData(pgm_read_byte(&(twirl[t])));
+          vfdData(0x13 - t);
           vfdCommand(0xc0 + c);
-          vfdData(pgm_read_byte(&(twirl[t])));
+          vfdData(0x15 + t);
           vfdCommand(0xc0 + (19 - c));
-          vfdData(pgm_read_byte(&(twirl[t])));
-          if (serialAvailableDelay(3)) { return true; }
+          vfdData(0x13 - t);
+          if (serialAvailableDelay(10)) { return true; }
         }
+        vfdCommand(0x80 + c);
+        vfdData(vfdProcessData(pgm_read_byte(&(screens[(screen - 1)][c]))));
+        vfdCommand(0x80 + (19 - c));
+        vfdData(vfdProcessData(pgm_read_byte(&(screens[(screen - 1)][(19 - c)]))));
+        vfdCommand(0xc0 + c);
+        vfdData(vfdProcessData(pgm_read_byte(&(screens[(screen - 1)][20 + c]))));
+        vfdCommand(0xc0 + (19 - c));
+        vfdData(vfdProcessData(pgm_read_byte(&(screens[(screen - 1)][20 + (19 - c)]))));
       }
-      vfdCommand(0x80 + c);
-      vfdData(vfdProcessData(pgm_read_byte(&(screens[(screen - 1)][c]))));
-      vfdCommand(0x80 + (19 - c));
-      vfdData(vfdProcessData(pgm_read_byte(&(screens[(screen - 1)][(19 - c)]))));
-      vfdCommand(0xc0 + c);
-      vfdData(vfdProcessData(pgm_read_byte(&(screens[(screen - 1)][20 + c]))));
-      vfdCommand(0xc0 + (19 - c));
-      vfdData(vfdProcessData(pgm_read_byte(&(screens[(screen - 1)][20 + (19 - c)]))));
-    } 
+      break;
   }
   return false;
 }
