@@ -1,6 +1,9 @@
 # Arduino Samsung 20T202DA2JA 2x20 VFD with LCD Smartie
 Using the above sketch examples it's possible to control a Samsung 20T202DA2JA 2x20 VFD using LCD Smartie or any application which is compatible with Matrix Orbital serial LCD's. The screen can also be manipulated directly without a computer using a variety of built in animations and functions which store built in screens in flash memory.
 
+![ScreenShot](http://www.xodustech.com/images/xodusampredux/redux-25.jpg)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+![ScreenShot](http://www.xodustech.com/images/xodusampredux/redux-26.jpg)
+
 ## Setup with LCD Smartie
 LCD Smartie supports additional features of matrix orbital screens including GPO and Keypad support allowing up to 25 different keys.
 
@@ -21,3 +24,8 @@ LCD Smartie supports additional features of matrix orbital screens including GPO
 * Double-click Buttons in the left hand side menu to add the last button pressed or enter button name manually
 * Next select your condition, normally this in equals (=) sign and the test value which is normally 1
 * Lastly select the output action on the right hand side and click Add, click OK at the bottom and your button should now work
+
+## Finding the Screen
+The Samsung 20T202DA2JA 2x20 VFD is commonly available from many locations:
+* Adafruit - http://www.adafruit.com/products/347
+* eBay - http://www.ebay.com/sch/i.html?_nkw=20T202DA2JA
