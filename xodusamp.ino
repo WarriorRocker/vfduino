@@ -8,12 +8,12 @@
 
 //const int slaveSelectPin = 10; //define additional spi pin for vfd
 const int slaveSelectPin = 0; //define additional spi pin for vfd
-const int motorAPin = 4; //define first control pin for volume motor
-const int motorBPin = 5; //define second control pin for volume motor
-const int channelPin = 6; //define used to select 2 or 4 channel input
-const int powerPin = 7; //define pin used to turn amp on and off
+//const int motorAPin = 4; //define first control pin for volume motor
+//const int motorBPin = 5; //define second control pin for volume motor
+//const int channelPin = 6; //define used to select 2 or 4 channel input
+//const int powerPin = 7; //define pin used to turn amp on and off
 const int irPin = 8; //define the data pin of the ir reciever
-const int modePin = 21; //define pin to check for current power mode
+//const int modePin = 21; //define pin to check for current power mode
 
 IRrecv irrecv(irPin); //setup the IRremote library in recieve mode
 decode_results results; //setup buffer variable for ir commands
@@ -24,42 +24,16 @@ int flowControl = 0; //setup variable to contain current cursor position
 
 //built in screens (each screen uses 42 bytes of flash)
 prog_uchar screens[][41] PROGMEM = {
-  "--  Arduino  VFD  ----By Travis Brown --",
-  "  Many screens are   possible using 240 ",
-  "   unique and 16    custom characters.  ",
-  " Compatible with LCDSmartie using Matrix",
-  " Orbital plugin and keypad input with IR",
+  "-- XodusAmp Redux ----By Travis Brown --",
   "--  Arduino  VFD  ---- waiting for PC --",
-  "Sym: `~!@#$%^&*()_-+[]{}\\|:;'\"<>?/,.  ",
-  "Num: 0123456789          9876543210 :muN",
-  "Alpha: ABCDEFGHIJKLMNOPQRSTUVWXYZ       ",
-  "alpha: abcdefghijklmnopqrstuvwxyz       ",
-  " Prepare for Jokes     They're Corny!   ",
-  " I bet you I could     stop gambling.   ",
-  " When is a door not    a door?          ",
-  "-> When it's ajar.               <('.')>",
-  " What kind of rooms    have no walls?   ",
-  "-> Mushrooms.                    <('.'<)",
-  " What's brown and    rhymes with Snoop? ",
-  "-> Dr. Dre.                      (>'.')>",
-  " Why was the pencil   in the toilet?    ",
-  "-> It was a #2.                  (>'.'<)",
 };
 
-//screen animation sprites
-prog_uchar twirl[4] PROGMEM = { 0xb0, 0x8c, 0x7c, 0x2f };
-
 void setup() {
-  Serial.begin(19200); //open a serial connection on digital pins 0 and 1
+  Serial.begin(9600); //open a serial connection
   irrecv.enableIRIn(); // start the ir receiver
   vfdInitialize(); //initialize and setup the samsung 20T202DA2JA vfd
 
   vfdDisplayScreen(1); //display the first screen (startup)
-
-  serialAvailableDelay(100); //introduce a 100ms delay to allow serial buffer to fill
-  if (!Serial.available()) { //check if serial is ready if not run intro
-    runIntro();
-  }
 }
 
 void loop() {
@@ -68,20 +42,8 @@ void loop() {
   //place additional non-blocking routines here
 }
 
-void runIntro() {
-  int numScreens = (sizeof(screens) / sizeof(char) / 41);
-  bool breaker = false;
-  while (!breaker) {
-    for (int i = 2; i < (numScreens + 1); i++) {
-      if (breaker = ((serialAvailableDelay(2000)) || (vfdAnimateScreen(i, random(1, 3))))) {
-        break;
-      }
-    }
-  }
-}
-
 void remoteProcess() {
-  //keycodes setup for comcast mini remote
+  //keycodes setup for apple mini remote
   byte keyPress = 0;
   if (irrecv.decode(&results)) {
     switch (results.value) {
@@ -121,29 +83,29 @@ void vfdInitialize() {
   vfdCommand(0x02); //move cursor to the original position
   vfdCommand(0x06); //set the cursor direction increment and cursor shift enabled
   vfdCommand(0x0c); //set display on,cursor on,blinking off
-  vfdCommand(0x38); //set 8bit operation,2 line display and 100% brightness level
+  vfdCommand(0x38); //set 8bit operation, 2 line display, and 100% brightness level
   vfdCommand(0x80); //set cursor to the first position of 1st line 
 }
 
 void vfdProcess() {
   if (Serial.available()) {
     if (firstCommand) {
-      vfdCommand(0x01);
-      vfdCommand(0x02);
+      vfdCommand(0x01); //clear all display and set DD-RAM address 0 in address counter
+      vfdCommand(0x02); //move cursor to the original position
       firstCommand = false;
     }
     byte rxbyte = serialGet();  
-    if (rxbyte == 254) {
-      vfdProcessCommand();
+    if (rxbyte == 254) { //code 0xfd signals matrix orbital command
+      vfdProcessCommand(); //call function to process the pending command
     } else {
       if (flowControl == 20) {
-        vfdCommand(0xc0);
+        vfdCommand(0xc0); //set cursor to the first position of 2nd line 
       } else if (flowControl == 40) {
-        vfdCommand(0x80);
-        flowControl = 0;
+        vfdCommand(0x80); //set cursor to the first position of 1st line 
+        flowControl = 0; //reset flow control back to start position
       }
       flowControl++;
-      vfdData(vfdProcessData(rxbyte));
+      vfdData(vfdProcessData(rxbyte)); //process the character and then send as data
     }
   }
 }
@@ -160,35 +122,31 @@ void vfdProcessCommand() {
       break;
     case 66: //backlight on (minutes)
       temp = serialGet();
-      vfdCommand(0x34);
+      vfdCommand(0x38); //set 8bit operation, 2 line display, and 100% brightness level
       break;
     case 70: //backlight off
-      vfdCommand(0x38);
+      vfdCommand(0x3b); //set 8bit operation, 2 line display, and 25% brightness level
       break;
     case 71: //set cursor position (column, row)
       temp = (serialGet() - 1);
       flowControl = temp;
-      switch (serialGet()) {
-      case 2:
-        temp += 0x40;
+      if (serialGet() == 2) {
+        temp += 0x40; //increase cursor position to the next line
         flowControl += 20;
-        break;
-      default:
-        break;
       }
-      vfdCommand(0x80 + temp);
+      vfdCommand(0x80 + temp); //set cursor to the nth position
       break;
     case 72: //set cursor home
       flowControl = 0;
-      vfdCommand(0x80);
+      vfdCommand(0x80); //set cursor to the first position of 1st line 
       break;
     case 76: //move cursor left
       flowControl--;
-      vfdCommand(0x10);
+      vfdCommand(0x10); //set cursor position one character to the left
       break;
     case 77: //move cursor right
       flowControl++;
-      vfdCommand(0x11);
+      vfdCommand(0x11); //set cursor position one character to the right
       break;
     case 78: //define custom character (id, data 8 bytes)
       vfdCommand(0x40 + (serialGet() * 8));
@@ -204,8 +162,8 @@ void vfdProcessCommand() {
       break;
     case 88: //clear display
       flowControl = 0;
-      vfdCommand(0x01);
-      vfdCommand(0x80);
+      vfdCommand(0x01); //clear all display and set DD-RAM address 0 in address counter
+      vfdCommand(0x80); //set cursor to the first position of 1st line 
       break;
 
     //not implemented, no extra parameters
@@ -340,149 +298,9 @@ void vfdWriteDebug(byte rxbyte) {
   }
 }
 
-bool vfdAnimateScreen(int screen, int ani) {
-  switch (ani) {
-    default: case 1: //left-right twirl swipe
-      for (int c = 0; c < 20; c++) {
-        for (int l = 0; l < 3; l++) {
-          for (int t = 0; t < 4; t++) {
-            vfdCommand(0x80 + c);
-            vfdData(pgm_read_byte(&(twirl[t])));
-            vfdCommand(0xc0 + (19 - c));
-            vfdData(pgm_read_byte(&(twirl[t])));
-            delay(3);
-          }
-        }
-        vfdCommand(0x80 + c);
-        vfdData(vfdProcessData(pgm_read_byte(&(screens[(screen - 1)][c]))));
-        vfdCommand(0xc0 + (19 - c));
-        vfdData(vfdProcessData(pgm_read_byte(&(screens[(screen - 1)][20 + (19 - c)]))));
-      }
-      break;
-    case 2: //inward-outward twirl swipe  
-      for (int c = 0; c < 10; c++) {
-        for (int l = 0; l < 3; l++) {
-          for (int t = 0; t < 4; t++) {
-            vfdCommand(0x80 + c);
-            vfdData(pgm_read_byte(&(twirl[t])));
-            vfdCommand(0x80 + (19 - c));
-            vfdData(pgm_read_byte(&(twirl[t])));
-            vfdCommand(0xc0 + c);
-            vfdData(pgm_read_byte(&(twirl[t])));
-            vfdCommand(0xc0 + (19 - c));
-            vfdData(pgm_read_byte(&(twirl[t])));
-            if (serialAvailableDelay(3)) { return true; }
-          }
-        }
-        vfdCommand(0x80 + c);
-        vfdData(0x20);
-        vfdCommand(0x80 + (19 - c));
-        vfdData(0x20);
-        vfdCommand(0xc0 + c);
-        vfdData(0x20);
-        vfdCommand(0xc0 + (19 - c));
-        vfdData(0x20);
-      }
-      for (int c = 10; c < 20; c++) {
-        for (int l = 0; l < 3; l++) {
-          for (int t = 0; t < 4; t++) {
-            vfdCommand(0x80 + c);
-            vfdData(pgm_read_byte(&(twirl[t])));
-            vfdCommand(0x80 + (19 - c));
-            vfdData(pgm_read_byte(&(twirl[t])));
-            vfdCommand(0xc0 + c);
-            vfdData(pgm_read_byte(&(twirl[t])));
-            vfdCommand(0xc0 + (19 - c));
-            vfdData(pgm_read_byte(&(twirl[t])));
-            if (serialAvailableDelay(3)) { return true; }
-          }
-        }
-        vfdCommand(0x80 + c);
-        vfdData(vfdProcessData(pgm_read_byte(&(screens[(screen - 1)][c]))));
-        vfdCommand(0x80 + (19 - c));
-        vfdData(vfdProcessData(pgm_read_byte(&(screens[(screen - 1)][(19 - c)]))));
-        vfdCommand(0xc0 + c);
-        vfdData(vfdProcessData(pgm_read_byte(&(screens[(screen - 1)][20 + c]))));
-        vfdCommand(0xc0 + (19 - c));
-        vfdData(vfdProcessData(pgm_read_byte(&(screens[(screen - 1)][20 + (19 - c)]))));
-      }
-      break;
-    case 3: //random twirl character place
-
-      char order[40], r, t;
-      for (int i = 0; i < 40; i++) {
-        order[i] = i;
-      }
-      for (int i = 0; i < 40; i++) {
-        r = random(0, 40);
-        t = order[i];
-        order[i] = order[r];
-        order[r] = t;
-      }
-      for (int i = 0; i < 40; i++) {
-        for (int l = 0; l < 3; l++) {
-          for (int t = 0; t < 4; t++) {
-            vfdCommand(0x80 + order[i] + ((order[i] > 19) ? 0x2c : 0));
-            vfdData(pgm_read_byte(&(twirl[t])));
-            if (serialAvailableDelay(5)) { return true; }
-          }
-        }
-        vfdCommand(0x80 + order[i] + ((order[i] > 19) ? 0x2c : 0));
-        vfdData(vfdProcessData(pgm_read_byte(&(screens[(screen - 1)][order[i]]))));
-      }
-      break;
-    case 4: //inward-outward bar swipe
-      for (int c = 0; c < 10; c++) {
-        for (int t = 0; t < 5; t++) {
-          vfdCommand(0x80 + c);
-          vfdData(0x10 + t);
-          vfdCommand(0x80 + (19 - c));
-          vfdData(0x18 - t);
-          vfdCommand(0xc0 + c);
-          vfdData(0x10 + t);
-          vfdCommand(0xc0 + (19 - c));
-          vfdData(0x18 - t);
-          if (serialAvailableDelay(5)) { return true; }
-        }
-      }
-      for (int c = 10; c < 20; c++) {
-        for (int t = 0; t < 4; t++) {
-          vfdCommand(0x80 + c);
-          vfdData(0x15 + t);
-          vfdCommand(0x80 + (19 - c));
-          vfdData(0x13 - t);
-          vfdCommand(0xc0 + c);
-          vfdData(0x15 + t);
-          vfdCommand(0xc0 + (19 - c));
-          vfdData(0x13 - t);
-          if (serialAvailableDelay(5)) { return true; }
-        }
-        vfdCommand(0x80 + c);
-        vfdData(vfdProcessData(pgm_read_byte(&(screens[(screen - 1)][c]))));
-        vfdCommand(0x80 + (19 - c));
-        vfdData(vfdProcessData(pgm_read_byte(&(screens[(screen - 1)][(19 - c)]))));
-        vfdCommand(0xc0 + c);
-        vfdData(vfdProcessData(pgm_read_byte(&(screens[(screen - 1)][20 + c]))));
-        vfdCommand(0xc0 + (19 - c));
-        vfdData(vfdProcessData(pgm_read_byte(&(screens[(screen - 1)][20 + (19 - c)]))));
-      }
-      break;
-  }
-  return false;
-}
-
 byte serialGet() {
   int incoming;
   while (!Serial.available()) { }
   incoming = Serial.read();
   return (byte) (incoming &0xff);
-}
-
-bool serialAvailableDelay(int ms) {
-  for (int i = 0; i < ms; i++) {
-    if (Serial.available()) { return true; } //exit function if serial available
-    remoteProcess(); //process any pending ir remote commands
-    delay(1);
-  }
-  return false; //return false to indicate serial not available
 }
