@@ -21,7 +21,7 @@ unsigned long lastPress = 0; //variable for tracking the last keypress
 bool firstCommand = true; //set variable to clear display with first command
 int flowControl = 0; //setup variable to contain current cursor position
 
-int powerThreshold = 900;
+int powerThreshold = 900; //threshold for knowing when amp is powered
 
 //built in screens (each screen uses 42 bytes of flash)
 prog_uchar screens[][41] PROGMEM = {
@@ -29,37 +29,35 @@ prog_uchar screens[][41] PROGMEM = {
   "--  Arduino  VFD  ----By Travis Brown --",
 };
 
+//built in 2nd display line screens (each line uses 21 bytes of flash)
 prog_uchar lines[][21] PROGMEM = {
-  "     Amplifier On   ",
-  "    Amplifier Off   ",
-  "      Volume Up     ",
-  "     Volume Down    ",
-  "   2 Channel Input  ",
-  "   4 Channel Input  ",
-  "     Amp is Off     ",
-  "   No power to Amp  ",
+  "     Amplifier On   ", "    Amplifier Off   ",
+  "      Volume Up     ", "     Volume Down    ",
+  "   2 Channel Input  ", "   4 Channel Input  ",
+  "     Amp is Off     ", "   No power to Amp  ",
 };
 
+//buffer to hold current data displayed on 2nd display line
 char lineBuffer[21] = { "                    " };
 
 void setup() {
-  pinMode(modePin, INPUT);
-  pinMode(motorAPin, OUTPUT);
-  pinMode(motorBPin, OUTPUT);
-  pinMode(powerPin, OUTPUT);
-  pinMode(channelPin, OUTPUT);
+  pinMode(modePin, INPUT); //setup modePin as input detecting input voltage to microcontroller
+  pinMode(motorAPin, OUTPUT); //setup motorAPin as output connected to motor pin A via h-bridge
+  pinMode(motorBPin, OUTPUT); //setup motorBPin as output connected to motor pin B via h-bridge
+  pinMode(powerPin, OUTPUT); //setup powerPin as output connected to amp ACC line via h-bridge
+  pinMode(channelPin, OUTPUT); //setup channelPin as output connected to relay via NPN transistor
   
-  digitalWrite(motorAPin, 0);
-  digitalWrite(motorAPin, 0);
-  digitalWrite(powerPin, 0);
-  digitalWrite(channelPin, 0);
+  digitalWrite(motorAPin, 0); //set motorAPin to 0 setting motor pin A to ground
+  digitalWrite(motorAPin, 0); //set motorBPin to 0 setting motor pin B to ground
+  digitalWrite(powerPin, 0); //set powerPin to 0 deactivating the amplifier
+  digitalWrite(channelPin, 0); //set channelPin to 0 indicating 4 channel input
   
   Serial.begin(9600); //open a serial connection
   irrecv.enableIRIn(); // start the ir receiver
   vfdInitialize(); //initialize and setup the samsung 20T202DA2JA vfd
   vfdDisplayScreen(1); //display the first screen (startup)
-  if (analogRead(modePin) < powerThreshold) {
-    vfdDisplayLinePause(8);
+  if (analogRead(modePin) < powerThreshold) { //check if the power input to amp is connected
+    vfdDisplayLinePause(8); //display no power to amp 2nd line screen
   }
 }
 
@@ -70,13 +68,14 @@ void loop() {
 }
 
 void remoteProcess() {
-  byte keyPress = 0;
-  if (irrecv.decode(&results)) {
-    keyPress = remoteProcessKeycode();
-    if ((keyPress) && (millis() > (lastPress + 200))) {
-      remoteProcessCommand(keyPress);
+  if (irrecv.decode(&results)) { //check if the decoded results contain an ir code
+    byte keyPress = remoteProcessKeycode(); //return the proper key pressed based on ir code
+    if ((keyPress) && (millis() > (lastPress + 200))) { //check if keypress is outside threshold
+      remoteProcessCommand(keyPress); //process the command received for amp controls
+      Serial.print((char)keyPress); //print the command received to serial
+      lastPress = millis(); //update the last key press time
     }
-    irrecv.resume();
+    irrecv.resume(); //clear the results buffer and start listening for a new ir code
   }
 }
 
@@ -84,23 +83,25 @@ byte remoteProcessKeycode() {
   //keycodes setup for apple mini remote
   switch (results.value) {
     case 2011275437: //play/pause button
-      return 65;
+      return 65; //ascii character A
     case 2011283629: //menu button
-      return 66;
-    case 2011254957: //volume up
-      return 67;
-    case 2011246765: //volume down
-      return 68;
-    case 2011271341: //track left
-      return 69;
-    case 2011259053: //track right
-      return 70;
+      return 66; //ascii character B
+    case 2011254957: //volume up button
+      return 67; //ascii character C
+    case 2011246765: //volume down button
+      return 68; //ascii character D
+    case 2011271341: //track left button
+      return 69; //ascii character E
+    case 2011259053: //track right button
+      return 70; //ascii character F
+    default:
+      return 0; //no valid code received
   }
 }
 
 void remoteProcessCommand(byte keyPress) {
-  if (analogRead(modePin) >= powerThreshold) {
-    if (digitalRead(powerPin)) {
+  if (analogRead(modePin) >= powerThreshold) { //check if the power input to amp is connected
+    if (digitalRead(powerPin)) { //check if the amp is currently powered on
       switch (keyPress) {
         case 65:
           ampTogglePower();
@@ -115,18 +116,16 @@ void remoteProcessCommand(byte keyPress) {
           ampVolumeDown();
           break;
       }
-    } else {
-      if (keyPress == 65) {
+    } else { //amp is currently powered off
+      if (keyPress == 65) { //check if power button pressed
         ampTogglePower();
-      } else {
-        vfdDisplayLinePause(7);
+      } else { //power button was not pressed
+        vfdDisplayLinePause(7); //display amp is off 2nd line screen
       }
     }
-  } else {
-    vfdDisplayLinePause(8);
+  } else { //amp is not being powered externally
+    vfdDisplayLinePause(8); //display no power to amp 2nd line screen
   }
-  Serial.print((char)keyPress);
-  lastPress = millis();
 }
 
 void vfdInitialize() {
@@ -143,27 +142,27 @@ void vfdInitialize() {
 }
 
 void vfdProcess() {
-  if (Serial.available()) {
-    if (firstCommand) {
+  if (Serial.available()) { //check if there is data waiting in the serial buffer
+    if (firstCommand) { //check if this is the first command received
       vfdCommand(0x01); //clear all display and set DD-RAM address 0 in address counter
       vfdCommand(0x02); //move cursor to the original position
-      firstCommand = false;
+      firstCommand = false; //set check variable to false
     }
-    byte rxbyte = serialGet();  
-    if (rxbyte == 254) {
-      vfdProcessCommand();
-    } else {
-      if (flowControl == 20) {
+    byte rxbyte = serialGet(); //get the first byte of data available in the buffer
+    if (rxbyte == 254) { //check if byte equals 0xfd signaling matrix orbital command
+      vfdProcessCommand(); //call function to process the pending command
+    } else { //data is a byte to display as character on the screen
+      if (flowControl == 20) { //check if character is the 21st in the stream
         vfdCommand(0xc0); //set cursor to the first position of 2nd line 
-      } else if (flowControl == 40) {
+      } else if (flowControl == 40) { //check if character is the 41st in the stream
         vfdCommand(0x80); //set cursor to the first position of 1st line 
-        flowControl = 0;
+        flowControl = 0; //reset flow control counter
       }
-      if (flowControl >= 20) {
-        lineBuffer[flowControl - 20] = vfdProcessData(rxbyte);
+      if (flowControl >= 20) { //check if character is on the 2nd line
+        lineBuffer[flowControl - 20] = vfdProcessData(rxbyte); //save character to line buffer
       }
-      flowControl++;
-      vfdData(vfdProcessData(rxbyte));
+      flowControl++; //increment the flow control counter
+      vfdData(vfdProcessData(rxbyte)); //process and write data to the screen
     }
   }
 }
@@ -180,33 +179,31 @@ void vfdProcessCommand() {
       break;
     case 66: //backlight on (minutes)
       temp = serialGet();
-      vfdCommand(0x38);
+      vfdCommand(0x38); //set 8bit operation, 2 line display, and 100% brightness level
       break;
     case 70: //backlight off
-      vfdCommand(0x3b);
+      vfdCommand(0x3b); //set 8bit operation, 2 line display, and 25% brightness level
       break;
     case 71: //set cursor position (column, row)
       temp = (serialGet() - 1);
-      flowControl = temp;
-      switch (serialGet()) {
-      case 2:
-        temp += 0x40;
-        flowControl += 20;
-        break;
+      flowControl = temp; //set flow control to the new column number
+      if (serialGet() == 2) { //check if new position is on 2nd row
+        temp += 0x40; //add 64 to n placing cursor on next line
+        flowControl += 20; //increment flow control to the next line
       }
-      vfdCommand(0x80 + temp);
+      vfdCommand(0x80 + temp); //set cursor to the nth position
       break;
     case 72: //set cursor home
-      flowControl = 0;
-      vfdCommand(0x80);
+      flowControl = 0; //reset the flow control counter
+      vfdCommand(0x80); //set cursor to the first position of 1st line 
       break;
     case 76: //move cursor left
-      flowControl--;
-      vfdCommand(0x10);
+      flowControl--; //decrement the flow control counter
+      vfdCommand(0x10); //set cursor position one character to the left
       break;
     case 77: //move cursor right
-      flowControl++;
-      vfdCommand(0x11);
+      flowControl++; //increment the flow control counter
+      vfdCommand(0x11); //set cursor position one character to the right
       break;
     case 78: //define custom character (id, data 8 bytes)
       vfdCommand(0x40 + (serialGet() * 8));
