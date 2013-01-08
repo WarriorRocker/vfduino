@@ -281,22 +281,22 @@ void vfdProcessCommand() {
     //not implemented, custom parameter lengths
     case 64: //set startup message (80 bytes)
       for (temp = 0; temp < 80; temp++) {
-      temp2 = serialGet();
+        temp2 = serialGet();
       }
       break;
     case 193: //save custom character (bank, id, data 8 bytes)
       for (temp = 0; temp < 10; temp++) {
-      temp2 = serialGet();
+        temp2 = serialGet();
       }
       break;
     case 194: //save custom startup character (id, data 8 bytes)
       for (temp = 0; temp < 9; temp++) {
-      temp2 = serialGet();
+        temp2 = serialGet();
       }
       break;
     case 213: //assign keypad codes (down 25 bytes, up 25 bytes)
       for (temp = 0; temp < 50; temp++) {
-      temp2 = serialGet();
+        temp2 = serialGet();
       }
       break;
   }
@@ -326,68 +326,50 @@ byte vfdProcessData(byte rxbyte) {
     case 186: //swap right bracket with closed circle
       return 0x94;
   }
-  return rxbyte;
+  return rxbyte; //return the unmodified character byte
 }
 
-void vfdData(unsigned char temp_1) {
-  digitalWrite(slaveSelectPin, LOW);
-  SPI.transfer(0xfa);
-  SPI.transfer(temp_1);
-  digitalWrite(slaveSelectPin, HIGH);
+void vfdData(unsigned char rxbyte) {
+  digitalWrite(slaveSelectPin, LOW); //set ss pin low indicating a data stream
+  SPI.transfer(0xfa); //signal the next byte of data to contain a data or character to display
+  SPI.transfer(rxbyte); //send data or character byte over spi connection
+  digitalWrite(slaveSelectPin, HIGH); //set ss pin high indicating end of data stream
 }
 
-void vfdCommand(unsigned char temp_2) {
-  digitalWrite(slaveSelectPin, LOW);
-  SPI.transfer(0xf8);
-  SPI.transfer(temp_2);
-  digitalWrite(slaveSelectPin, HIGH);
-}
-
-byte vfdGetData(unsigned char temp) {
-  digitalWrite(slaveSelectPin, LOW);
-  //SPI.transfer(
-  temp = SPI.transfer(0xfb);
-  digitalWrite(slaveSelectPin, HIGH);
-  return temp;
+void vfdCommand(unsigned char rxbyte) {
+  digitalWrite(slaveSelectPin, LOW); //set ss pin low indicating a data stream
+  SPI.transfer(0xf8); //signal the next byte of data to contain a command for the screen
+  SPI.transfer(rxbyte); //send command byte over spi connection
+  digitalWrite(slaveSelectPin, HIGH); //set ss pin high indicating end of data stream
 }
 
 void vfdDisplayScreen(int screen) {
-  for (int i = 0; i < 20; i++) {
-    vfdCommand(0x80 + i);
-    vfdData(vfdProcessData(pgm_read_byte(&(screens[(screen - 1)][i]))));
-    vfdCommand(0xc0 + i);
-    lineBuffer[i] = vfdProcessData(pgm_read_byte(&(screens[(screen - 1)][20 + i])));
-    vfdData(lineBuffer[i]);
+  for (int i = 0; i < 20; i++) { //loop through the 20 columns of the display
+    vfdCommand(0x80 + i); //set cursor to the nth position of the first line
+    vfdData(vfdProcessData(pgm_read_byte(&(screens[(screen - 1)][i])))); //read byte out of flash, process, and send as data
+    vfdCommand(0xc0 + i); //set cursor to the nth position of the second line
+    lineBuffer[i] = vfdProcessData(pgm_read_byte(&(screens[(screen - 1)][20 + i]))); //read byte out of flash, process, and store in line buffer
+    vfdData(lineBuffer[i]); //output the data in the nth position of the line buffer as data
   }
 }
 
 void vfdDisplayLine(int line) {
- for (int i = 0; i < 20; i++) {
-   vfdCommand(0xc0 + i);
-   vfdData(pgm_read_byte(&(lines[(line - 1)][i])));
+ for (int i = 0; i < 20; i++) { //loop through the 20 columns of the display
+   vfdCommand(0xc0 + i); //set cursor to the nth position of the second line
+   vfdData(pgm_read_byte(&(lines[(line - 1)][i]))); //read byte from flash and send as data
  } 
 }
 
 void vfdDisplayLinePause(int line) {
-  vfdDisplayLine(line);
-  delay(250);
-  vfdCopyFromLineBuffer();
-}
-
-void vfdWriteDebug(byte rxbyte) {
-  vfdCommand(0x01); //clear all display and set DD-RAM address 0 in address counter
-  vfdCommand(0x80); //set cursor to the first position of 1st line 
-  char z_str[5] = "    ";
-  itoa(rxbyte, z_str, 10);
-  for (int i=0; i<5; i++) {
-    vfdData(z_str[i]);
-  }
+  vfdDisplayLine(line); //display the specified line on 2nd line of display
+  delay(250); //pause for 250 milliseconds
+  vfdCopyFromLineBuffer(); //display the original 2nd line out of line buffer
 }
 
 void vfdCopyFromLineBuffer() {
- for (int i = 0; i < 20; i++) {
-   vfdCommand(0xc0 + i);
-   vfdData(lineBuffer[i]);
+ for (int i = 0; i < 20; i++) { //loop through the 20 columns of the display
+   vfdCommand(0xc0 + i); //set cursor to the nth position of the second line
+   vfdData(lineBuffer[i]); //send byte from nth position of line buffer to screen
  }
 }
 
