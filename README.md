@@ -1,4 +1,4 @@
-# Arduino Samsung 20T202DA2JA 2x20 VFD with LCD Smartie
+# [Arduino Samsung 20T202DA2JA 2x20 VFD with LCD Smartie](http://www.xodustech.com/development/vfduino)
 Using the above sketch examples it's possible to control a Samsung 20T202DA2JA 2x20 VFD using LCD Smartie or any application which is compatible with Matrix Orbital serial LCD's. The screen can also be manipulated directly without a computer using a variety of built in animations and functions which store built in screens in flash memory.
 
 ![ScreenShot](http://www.xodustech.com/images/xodusampredux/redux-25.jpg)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
