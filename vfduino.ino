@@ -1,5 +1,5 @@
 /*---------------------------------------------------------------*\
-|  Matrix Orbital compatible Samsung 20T202DA2JA VFD with remote  |
+|  vfduino - Samsung 20T202DA2JA VFD and remote using LCD Smartie |
 |  Version 1.0 Developed and Designed by: Travis Brown            |
 \*---------------------------------------------------------------*/
 
@@ -44,12 +44,10 @@ prog_uchar screens[][41] PROGMEM = {
 prog_uchar twirl[4] PROGMEM = { 0xb0, 0x8c, 0x7c, 0x2f };
 
 void setup() {
-  Serial.begin(19200); //open a serial connection on digital pins 0 and 1
-  irrecv.enableIRIn(); // start the ir receiver
+  Serial.begin(9600); //open a serial connection
+  irrecv.enableIRIn(); //start the ir receiver
   vfdInitialize(); //initialize and setup the samsung 20T202DA2JA vfd
-
   vfdDisplayScreen(1); //display the first screen (startup)
-
   serialAvailableDelay(100); //introduce a 100ms delay to allow serial buffer to fill
   if (!Serial.available()) { //check if serial is ready if not run intro
     runIntro();
@@ -75,63 +73,69 @@ void runIntro() {
 }
 
 void remoteProcess() {
-  //keycodes setup for comcast mini remote
-  byte keyPress = 0;
-  if (irrecv.decode(&results)) {
-    switch (results.value) {
-      case 3092478346: case 2536536664: //power button
-        keyPress = 65;
-        break;
-      case 3637894501: case 3489101622: //info button
-        keyPress = 66;
-        break;
-      case 1174510922: case 4011288510: //#1 button
-        keyPress = 67;
-        break;
-      case 3994726372: case 3645068377: //#2 button
-        keyPress = 68;
-        break;
+  if (irrecv.decode(&results)) { //check if the decoded results contain an ir code
+    byte keyPress = remoteProcessKeycode(); //return the proper key pressed based on ir code
+    if ((keyPress) && (millis() > (lastPress + 200))) { //check if keypress is outside threshold
+      Serial.print((char)keyPress); //print the command received to serial
+      lastPress = millis(); //update the last key press time
     }
-    if ((keyPress) && (millis() > (lastPress + 200))) {
-      Serial.print((char)keyPress);
-      lastPress = millis();
-    }
-    irrecv.resume();
+    irrecv.resume(); //clear the results buffer and start listening for a new ir code
+  }
+}
+
+byte remoteProcessKeycode() {
+  //keycodes setup for apple mini remote
+  switch (results.value) {
+    case 2011275437: //play/pause button
+      return 65; //ascii character A
+    case 2011283629: //menu button
+      return 66; //ascii character B
+    case 2011254957: //volume up button
+      return 67; //ascii character C
+    case 2011246765: //volume down button
+      return 68; //ascii character D
+    case 2011271341: //track left button
+      return 69; //ascii character E
+    case 2011259053: //track right button
+      return 70; //ascii character F
+    default:
+      return 0; //no valid code received
   }
 }
 
 void vfdInitialize() {
   pinMode(slaveSelectPin, OUTPUT); //setup spi slave select pin as output
   SPI.begin(); //start spi on digital pins 
-  SPI.setDataMode(SPI_MODE3); //set spi data mode 3
-  
+  SPI.setDataMode(SPI_MODE3); //set spi data mode 3 
   vfdCommand(0x01); //clear all display and set DD-RAM address 0 in address counter
   vfdCommand(0x02); //move cursor to the original position
   vfdCommand(0x06); //set the cursor direction increment and cursor shift enabled
-  vfdCommand(0x0c); //set display on,cursor on,blinking off
-  vfdCommand(0x38); //set 8bit operation,2 line display and 100% brightness level
+  vfdCommand(0x0c); //set display on, cursor on, blinking off
+  vfdCommand(0x38); //set 8bit operation, 2 line display, and 100% brightness level
   vfdCommand(0x80); //set cursor to the first position of 1st line 
 }
 
 void vfdProcess() {
-  if (Serial.available()) {
-    if (firstCommand) {
-      vfdCommand(0x01);
-      vfdCommand(0x02);
-      firstCommand = false;
+  if (Serial.available()) { //check if there is data waiting in the serial buffer
+    if (firstCommand) { //check if this is the first command received
+      vfdCommand(0x01); //clear all display and set DD-RAM address 0 in address counter
+      vfdCommand(0x02); //move cursor to the original position
+      firstCommand = false; //set check variable to false
     }
-    byte rxbyte = serialGet();  
-    if (rxbyte == 254) {
-      vfdProcessCommand();
-    } else {
-      if (flowControl == 20) {
-        vfdCommand(0xc0);
-      } else if (flowControl == 40) {
-        vfdCommand(0x80);
-        flowControl = 0;
+    byte rxbyte = serialGet(); //get the first byte of data available in the buffer
+    if (rxbyte == 254) { //check if byte equals 0xfd signaling matrix orbital command
+      vfdProcessCommand(); //call function to process the pending command
+    } else { //data is a byte to display as character on the screen
+      if (flowControl == 20) { //check if character is the 21st in the stream
+        vfdCommand(0xc0); //set cursor to the first position of 2nd line 
+      } else if (flowControl == 40) { //check if character is the 41st in the stream
+        vfdCommand(0x80); //set cursor to the first position of 1st line 
+        flowControl = 0; //reset flow control counter
       }
-      flowControl++;
-      vfdData(vfdProcessData(rxbyte));
+      if (flowControl >= 20) { //check if character is on the 2nd line
+      }
+      flowControl++; //increment the flow control counter
+      vfdData(vfdProcessData(rxbyte)); //process and write data to the screen
     }
   }
 }
@@ -148,35 +152,31 @@ void vfdProcessCommand() {
       break;
     case 66: //backlight on (minutes)
       temp = serialGet();
-      vfdCommand(0x34);
+      vfdCommand(0x38); //set 8bit operation, 2 line display, and 100% brightness level
       break;
     case 70: //backlight off
-      vfdCommand(0x38);
+      vfdCommand(0x3b); //set 8bit operation, 2 line display, and 25% brightness level
       break;
     case 71: //set cursor position (column, row)
       temp = (serialGet() - 1);
-      flowControl = temp;
-      switch (serialGet()) {
-      case 2:
-        temp += 0x40;
-        flowControl += 20;
-        break;
-      default:
-        break;
+      flowControl = temp; //set flow control to the new column number
+      if (serialGet() == 2) { //check if new position is on 2nd row
+        temp += 0x40; //add 64 to n placing cursor on next line
+        flowControl += 20; //increment flow control to the next line
       }
-      vfdCommand(0x80 + temp);
+      vfdCommand(0x80 + temp); //set cursor to the nth position
       break;
     case 72: //set cursor home
-      flowControl = 0;
-      vfdCommand(0x80);
+      flowControl = 0; //reset the flow control counter
+      vfdCommand(0x80); //set cursor to the first position of 1st line 
       break;
     case 76: //move cursor left
-      flowControl--;
-      vfdCommand(0x10);
+      flowControl--; //decrement the flow control counter
+      vfdCommand(0x10); //set cursor position one character to the left
       break;
     case 77: //move cursor right
-      flowControl++;
-      vfdCommand(0x11);
+      flowControl++; //increment the flow control counter
+      vfdCommand(0x11); //set cursor position one character to the right
       break;
     case 78: //define custom character (id, data 8 bytes)
       vfdCommand(0x40 + (serialGet() * 8));
@@ -185,15 +185,15 @@ void vfdProcessCommand() {
       }
       break;
     case 86: //GPO off (number)
-      temp = serialGet();
+      temp = serialGet(); //replace with switch for your specific GPO pins
       break;
     case 87: //GPO on (number)
-      temp = serialGet();
+      temp = serialGet(); //replace with switch for your specific GPO pins
       break;
     case 88: //clear display
       flowControl = 0;
-      vfdCommand(0x01);
-      vfdCommand(0x80);
+      vfdCommand(0x01); //clear all display and set DD-RAM address 0 in address counter
+      vfdCommand(0x80); //set cursor to the first position of 1st line 
       break;
 
     //not implemented, no extra parameters
@@ -249,22 +249,22 @@ void vfdProcessCommand() {
     //not implemented, custom parameter lengths
     case 64: //set startup message (80 bytes)
       for (temp = 0; temp < 80; temp++) {
-      temp2 = serialGet();
+        temp2 = serialGet();
       }
       break;
     case 193: //save custom character (bank, id, data 8 bytes)
       for (temp = 0; temp < 10; temp++) {
-      temp2 = serialGet();
+        temp2 = serialGet();
       }
       break;
     case 194: //save custom startup character (id, data 8 bytes)
       for (temp = 0; temp < 9; temp++) {
-      temp2 = serialGet();
+        temp2 = serialGet();
       }
       break;
     case 213: //assign keypad codes (down 25 bytes, up 25 bytes)
       for (temp = 0; temp < 50; temp++) {
-      temp2 = serialGet();
+        temp2 = serialGet();
       }
       break;
   }
@@ -294,37 +294,29 @@ byte vfdProcessData(byte rxbyte) {
     case 186: //swap right bracket with closed circle
       return 0x94;
   }
-  return rxbyte;
+  return rxbyte; //return the unmodified character byte
 }
 
-void vfdData(unsigned char temp_1) {
-  digitalWrite(slaveSelectPin, LOW);
-  SPI.transfer(0xfa);
-  SPI.transfer(temp_1);
-  digitalWrite(slaveSelectPin, HIGH);
+void vfdData(unsigned char rxbyte) {
+  digitalWrite(slaveSelectPin, LOW); //set ss pin low indicating a data stream
+  SPI.transfer(0xfa); //signal the next byte of data to contain a data or character to display
+  SPI.transfer(rxbyte); //send data or character byte over spi connection
+  digitalWrite(slaveSelectPin, HIGH); //set ss pin high indicating end of data stream
 }
 
-void vfdCommand(unsigned char temp_2) {
-  digitalWrite(slaveSelectPin, LOW);
-  SPI.transfer(0xf8);
-  SPI.transfer(temp_2);
-  digitalWrite(slaveSelectPin, HIGH);
+void vfdCommand(unsigned char rxbyte) {
+  digitalWrite(slaveSelectPin, LOW); //set ss pin low indicating a data stream
+  SPI.transfer(0xf8); //signal the next byte of data to contain a command for the screen
+  SPI.transfer(rxbyte); //send command byte over spi connection
+  digitalWrite(slaveSelectPin, HIGH); //set ss pin high indicating end of data stream
 }
 
 void vfdDisplayScreen(int screen) {
-  for (int i = 0; i < 20; i++) {
-    vfdCommand(0x80 + i);
-    vfdData(vfdProcessData(pgm_read_byte(&(screens[(screen - 1)][i]))));
-    vfdCommand(0xc0 + (19 - i));
-    vfdData(vfdProcessData(pgm_read_byte(&(screens[(screen - 1)][20 + (19 - i)]))));
-  }
-}
-
-void vfdWriteDebug(byte rxbyte) {
-  char z_str[5] = "    ";
-  itoa(rxbyte, z_str, 10);
-  for (int i=0; i<5; i++) {
-    vfdData(z_str[i]);
+  for (int i = 0; i < 20; i++) { //loop through the 20 columns of the display
+    vfdCommand(0x80 + i); //set cursor to the nth position of the first line
+    vfdData(vfdProcessData(pgm_read_byte(&(screens[(screen - 1)][i])))); //read byte out of flash, process, and send as data
+    vfdCommand(0xc0 + (19 - i)); //set cursor to the nth position of the second line
+    vfdData(vfdProcessData(pgm_read_byte(&(screens[(screen - 1)][20 + (19 - i)])))); //read byte out of flash, process, and send as data
   }
 }
 
