@@ -12,6 +12,7 @@ const int motorBPin = 5; //define second control pin for volume motor
 const int channelPin = 6; //define used to select 2 or 4 channel input
 const int powerPin = 7; //define pin used to turn amp on and off
 const int irPin = 8; //define the data pin of the ir reciever
+const int ledPin = 9; //define pin used for the power led
 const int modePin = 21; //define pin to check for current power mode
 
 IRrecv irrecv(irPin); //setup the IRremote library in recieve mode
@@ -45,11 +46,13 @@ void setup() {
   pinMode(motorAPin, OUTPUT); //setup motorAPin as output connected to motor pin A via h-bridge
   pinMode(motorBPin, OUTPUT); //setup motorBPin as output connected to motor pin B via h-bridge
   pinMode(powerPin, OUTPUT); //setup powerPin as output connected to amp ACC line via h-bridge
+  pinMode(ledPin, OUTPUT);
   pinMode(channelPin, OUTPUT); //setup channelPin as output connected to relay via NPN transistor
   
   digitalWrite(motorAPin, 0); //set motorAPin to 0 setting motor pin A to ground
   digitalWrite(motorAPin, 0); //set motorBPin to 0 setting motor pin B to ground
-  digitalWrite(powerPin, 0); //set powerPin to 0 deactivating the amplifier
+  digitalWrite(powerPin, 1); //set powerPin to 1 activating the amplifier
+  digitalWrite(ledPin, 1); //set power led pin to 1 activating the led
   digitalWrite(channelPin, 0); //set channelPin to 0 indicating 4 channel input
   
   Serial.begin(9600); //open a serial connection
@@ -131,8 +134,7 @@ void remoteProcessCommand(byte keyPress) {
 void vfdInitialize() {
   pinMode(slaveSelectPin, OUTPUT); //setup spi slave select pin as output
   SPI.begin(); //start spi on digital pins 
-  SPI.setDataMode(SPI_MODE3); //set spi data mode 3
-  
+  SPI.setDataMode(SPI_MODE3); //set spi data mode 3 
   vfdCommand(0x01); //clear all display and set DD-RAM address 0 in address counter
   vfdCommand(0x02); //move cursor to the original position
   vfdCommand(0x06); //set the cursor direction increment and cursor shift enabled
@@ -159,7 +161,7 @@ void vfdProcess() {
         flowControl = 0; //reset flow control counter
       }
       if (flowControl >= 20) { //check if character is on the 2nd line
-        lineBuffer[flowControl - 20] = vfdProcessData(rxbyte); //save character to line buffer
+        lineBuffer[(flowControl - 20)] = vfdProcessData(rxbyte); //save data written to 2nd line to line buffer
       }
       flowControl++; //increment the flow control counter
       vfdData(vfdProcessData(rxbyte)); //process and write data to the screen
@@ -208,18 +210,16 @@ void vfdProcessCommand() {
     case 78: //define custom character (id, data 8 bytes)
       vfdCommand(0x40 + (serialGet() * 8));
       for (temp = 0; temp < 8; temp++) {
-        vfdData(serialGet());
+        temp2 = serialGet();
+        //detect 8th line and show only if full line, vfd 8th line is cursor not dots
+        vfdData(((temp == 7) ? ((temp2 == 31) ? temp2 : 0) : temp2));
       }
       break;
+    case 86: //GPO off (number)
+      temp = serialGet(); //replace with switch for your specific GPO pins
+      break;
     case 87: //GPO on (number)
-      switch (serialGet()) {
-        case 1:
-          ampTogglePower();
-          break;
-        case 4:
-          ampToggleChannelInput();
-          break;
-      }
+      temp = serialGet(); //replace with switch for your specific GPO pins
       break;
     case 88: //clear display
       flowControl = 0;
@@ -242,7 +242,6 @@ void vfdProcessCommand() {
     case 82: //auto scroll off
     case 83: //show blinking block cursor
     case 84: //hide blinking block cursor
-    case 86: //GPO off (number)
     case 96: //auto-repeat mode off
     case 104: //init horizontal bar graph
     case 109: //init medium size digits
@@ -305,12 +304,6 @@ void vfdProcessCommand() {
 byte vfdProcessData(byte rxbyte) {
   //case: (input) -> return (desired output)
   switch (rxbyte) {
-    case 1: //swap cgram(1) with char 0x14
-      return 0x14;
-    case 2: //swap cgram(2) with char 0x10
-      return 0x10;
-    case 3: //swap cgram(3) with char 0x11
-      return 0x11;
     case 92: //swap yen symbol with backslash
       return 0x8c;
     case 126: //swap right arrow with tilde
@@ -409,9 +402,11 @@ void ampToggleChannelInput() {
 void ampTogglePower() {
   if (digitalRead(powerPin)) {
     digitalWrite(powerPin, 0);
+    digitalWrite(ledPin, 0);
     vfdDisplayLinePause(2);
   } else {
     digitalWrite(powerPin, 1);
+    digitalWrite(ledPin, 1);
     vfdDisplayLinePause(1);
   }
 }
